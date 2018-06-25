@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>ocx交易机器人</title>
+</head>
+
+<body>
+    <div id="log" style="font-size: 12px;">
+
+    </div>
+
+    <script src="js/axios.min.js"></script>
+    <script src="js/jssha256.js"></script>
+    <script src="js/vue.min.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        // api
+        var apiKey = '';
+        var secretKey = '';
+
+        // 交易对代号
+        var marketCode='ethusdt';
+        // 订单数量
+        var orderCount='0.1336';
+        // 买一卖一差价限制
+        var limitPrice='0.005';
+
+        var sellStatus=false;
+        var sellPrice=0;
+        var buyPrice=0;
+
+        //启动
+       getPrice('sell');
+
+        // 获取价格
+        function getPrice(type) {
+            httpHelp('get', `https://openapi.ocx.com/api/v2/tickers?market_code=${marketCode}`).then(function (resp) {
+                let result = resp.data;
+                sellPrice = result.data[0].sell;
+                buyPrice = result.data[0].buy;
+                if (sellPrice - buyPrice > limitPrice) {
+                    setTimeout(function () {
+                        getPrice(type);
+                    }, 500);
+                } else {
+                    console.log('获取价格...')
+                    if (type == 'buy') {
+                        buy(sellPrice, orderCount)
+                    } else if (type == 'sell') {
+                        sell(buyPrice, orderCount)
+                    }
+                }
+            });
+        }
+
+        // 买单
+        function buy(price, count) {
+            let tonce = new Date().getTime();
+            let string_to_sign = `POST|/api/v2/orders|access_key=${apiKey}&foo=bar&market_code=${marketCode}&price=${price}&side=buy&tonce=${tonce}&volume=${count}`
+
+            let signature = HMAC_SHA256_MAC(secretKey, string_to_sign);
+            let url = `https://openapi.ocx.com/api/v2/orders?market_code=${marketCode}&access_key=${apiKey}&foo=bar&tonce=${tonce}&signature=${signature}&price=${price}&side=buy&volume=${count}`;
+            httpHelp('post', url).then(function (resp) {
+                var result = resp.data;
+                // console.log(result);
+                console.log(`${marketCode} | 买：${count} | 价格：${price}-成功`)
+
+                document.getElementById("log").innerHTML +=`${marketCode} | 买：${count} | 价格：${price}-成功<br/>`
+                setTimeout(function () {
+                    if(sellStatus){
+                        getPrice('sell');
+                        sellStatus = false;
+                    }else{
+                        sell(buyPrice,count);
+                    }
+                }, 500)
+            })
+        }
+
+
+        // 卖单
+        function sell(price, count) {
+            let tonce = new Date().getTime();
+            let string_to_sign = `POST|/api/v2/orders|access_key=${apiKey}&foo=bar&market_code=${marketCode}&price=${price}&side=sell&tonce=${tonce}&volume=${count}`
+
+            let signature = HMAC_SHA256_MAC(secretKey, string_to_sign);
+            let url = `https://openapi.ocx.com/api/v2/orders?market_code=${marketCode}&access_key=${apiKey}&foo=bar&tonce=${tonce}&signature=${signature}&price=${price}&side=sell&volume=${count}`;
+            httpHelp('post', url).then(function (resp) {
+                var result = resp.data;
+                //console.log(result);
+                console.log(`${marketCode} | 卖：${count} | 价格：${price} | 成功`)
+
+                 document.getElementById("log").innerHTML +=`${marketCode} | 卖：${count} | 价格：${price} | 成功<br/>`
+                setTimeout(function () {
+                     if(sellStatus){
+                        getPrice('buy');
+                    }else{
+                        buy(sellPrice,count);
+                        sellStatus = true;
+                    }
+                }, 500)
+            })
+        }
+    </script>
+</body>
+
+</html>
